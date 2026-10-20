@@ -464,10 +464,12 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       const txData = check.data.data || {};
       bankUrl = txData.payment_method?.extra?.async_payment_url || null;
       console.log(`Polling ${i + 1}/15 — status: ${txData.status}, bankUrl: ${bankUrl ? "SÍ" : "no"}`);
-      if (bankUrl) break;
       if (txData.status === "DECLINED" || txData.status === "ERROR") {
+        console.log("═══ DECLINED/ERROR DETALLE COMPLETO ═══");
+        console.log(JSON.stringify(check.data, null, 2));
         return res.status(400).json({ success: false, message: `Transacción ${txData.status}`, details: txData });
       }
+      if (bankUrl) break;
     }
 
     if (!bankUrl) {
