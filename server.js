@@ -413,7 +413,6 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       customer_email: customerEmail,
       reference: reference,
       redirect_url: `${URL_FRONT}/respuesta.html?status=success&ref=${encodeURIComponent(reference)}`,
-      payment_link_id: paymentLinkId,
       payment_method: {
         type: "PSE",
         user_type: 0,
