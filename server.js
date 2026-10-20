@@ -354,7 +354,7 @@ const WOMPI_PAYMENT_LINK_ID = "VPOS_YJLGcM";
 const WOMPI_API = "https://api.wompi.co/v1";
 
 async function getWompiTokens() {
-  const { data } = await axios.get(`${WOMPI_API}/merchants/${WOMPI_PUB_KEY}`, { timeout: 10000 });
+  const { data } = await axios.get(`${WOMPI_API}/merchants/${WOMPI_PUB_KEY}`, { timeout: 10000, httpsAgent: proxyAgent, proxy: false });
   return {
     acceptance_token: data.data.presigned_acceptance.acceptance_token,
     personal_auth_token: data.data.presigned_personal_data_auth.acceptance_token
@@ -367,7 +367,9 @@ async function getWompiTokens() {
 app.get("/api/pasarela/bancos-pse", async (req, res) => {
   try {
     const response = await axios.get(`${WOMPI_API}/pse/financial_institutions`, {
-      headers: { Authorization: `Bearer ${WOMPI_PUB_KEY}` }
+      headers: { Authorization: `Bearer ${WOMPI_PUB_KEY}` },
+      httpsAgent: proxyAgent,
+      proxy: false
     });
 
     const bancos = (response.data.data || []).map(b => ({
@@ -413,6 +415,7 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
       customer_email: customerEmail,
       reference: reference,
       redirect_url: `${URL_FRONT}/respuesta.html?status=success&ref=${encodeURIComponent(reference)}`,
+      payment_link_id: paymentLinkId,
       payment_method: {
         type: "PSE",
         user_type: 0,
@@ -437,12 +440,14 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
     console.log("═══ TRANSACCIÓN WOMPI PSE (public key) ═══");
     console.log(JSON.stringify(transactionPayload, null, 2));
 
-    // 5. Crear transacción con PUBLIC KEY como Bearer
+    // 5. Crear transacción con PUBLIC KEY como Bearer (vía proxy residencial para evitar AFE)
     const wompiRes = await axios.post(`${WOMPI_API}/transactions`, transactionPayload, {
       headers: {
         Authorization: `Bearer ${WOMPI_PUB_KEY}`,
         "Content-Type": "application/json"
-      }
+      },
+      httpsAgent: proxyAgent,
+      proxy: false
     });
 
     console.log("═══ RESPUESTA WOMPI ═══");
@@ -458,7 +463,9 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 2000));
       const check = await axios.get(`${WOMPI_API}/transactions/${txId}`, {
-        headers: { Authorization: `Bearer ${WOMPI_PUB_KEY}` }
+        headers: { Authorization: `Bearer ${WOMPI_PUB_KEY}` },
+        httpsAgent: proxyAgent,
+        proxy: false
       });
       const txData = check.data.data || {};
       bankUrl = txData.payment_method?.extra?.async_payment_url || null;
